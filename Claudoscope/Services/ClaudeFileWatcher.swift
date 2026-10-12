@@ -12,6 +12,9 @@ enum FileChange: Sendable {
     /// A Claude Code session-registry file (~/.claude/sessions/<pid>.json)
     /// appeared, changed or vanished. Carries the registry file URL.
     case registryChanged(URL)
+    /// A /insights output file (~/.claude/usage-data/facets/ or session-meta/
+    /// JSON) appeared, changed or vanished. Carries the file URL.
+    case insightsChanged(URL)
     case mustRescan
 }
 
@@ -59,21 +62,27 @@ final class ClaudeFileWatcher: @unchecked Sendable {
     init(claudeDir: URL) {
         self.claudeDir = claudeDir
         self.registryDirPrefix = Self.registryDirPrefix(claudeDir: claudeDir)
+        self.usageDataDirPrefix = Self.usageDataDirPrefix(claudeDir: claudeDir)
     }
 
     private let registryDirPrefix: String
+    private let usageDataDirPrefix: String
 
     /// Which pipeline a path under ~/.claude feeds. Pure, so the branch table
     /// is unit-testable without an FSEvents stream.
     enum PathKind: Equatable {
-        case session, notificationSpool, registry, config
+        case session, notificationSpool, registry, insights, config
     }
 
     static func registryDirPrefix(claudeDir: URL) -> String {
         claudeDir.appendingPathComponent("sessions").path + "/"
     }
 
-    static func classify(path: String, registryDirPrefix: String) -> PathKind? {
+    static func usageDataDirPrefix(claudeDir: URL) -> String {
+        claudeDir.appendingPathComponent("usage-data").path + "/"
+    }
+
+    static func classify(path: String, registryDirPrefix: String, usageDataDirPrefix: String) -> PathKind? {
         // Session .jsonl files only live under ~/.claude/projects/. Now that the
         // watch root is the whole ~/.claude/ tree, gate on the path component to
         // ignore unrelated .jsonl files (e.g. ~/.claude/history.jsonl).
@@ -87,6 +96,12 @@ final class ClaudeFileWatcher: @unchecked Sendable {
         // per-process secrets and must never be picked up.
         if path.hasPrefix(registryDirPrefix) && path.hasSuffix(".json") {
             return .registry
+        }
+        // /insights writes facets/ and session-meta/ JSON here. Anchored at the
+        // root so a plugin or project folder named usage-data cannot match;
+        // the .html reports beside them fail the suffix check.
+        if path.hasPrefix(usageDataDirPrefix) && path.hasSuffix(".json") {
+            return .insights
         }
         if path.hasSuffix("settings.json") ||
             path.hasSuffix("settings.local.json") ||
@@ -196,7 +211,7 @@ final class ClaudeFileWatcher: @unchecked Sendable {
         let isInodeMeta = flags & UInt32(kFSEventStreamEventFlagItemInodeMetaMod) != 0
         let isRemoved = flags & UInt32(kFSEventStreamEventFlagItemRemoved) != 0
 
-        switch Self.classify(path: path, registryDirPrefix: registryDirPrefix) {
+        switch Self.classify(path: path, registryDirPrefix: registryDirPrefix, usageDataDirPrefix: usageDataDirPrefix) {
         case .none:
             return
         case .session:
@@ -230,6 +245,12 @@ final class ClaudeFileWatcher: @unchecked Sendable {
             guard isCreated || isModified || isRenamed || isInodeMeta || isRemoved else { return }
             debounceEmit(key: path) {
                 return .registryChanged(url)
+            }
+        case .insights:
+            // Removal matters too: deleted facets must drop out of the view.
+            guard isCreated || isModified || isRenamed || isInodeMeta || isRemoved else { return }
+            debounceEmit(key: path) {
+                return .insightsChanged(url)
             }
         case .config:
             guard isCreated || isModified else { return }
