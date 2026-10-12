@@ -147,10 +147,13 @@ enum FleetStateEngine {
     }
 
     /// One entry per session. Two processes on one session id (resume after a
-    /// crash): keep the most recently updated one.
+    /// crash): keep the most recently updated one. Parked terminals are left
+    /// out: their session continues in a background job with its own entry,
+    /// so keeping them showed a second Working card and, once the terminal
+    /// closed, a false mid-turn exit (exit tracking reads this map too).
     static func registryBySession(_ registry: [RegistryEntry]) -> [String: RegistryEntry] {
         var bySession: [String: RegistryEntry] = [:]
-        for entry in registry {
+        for entry in registry where !entry.isParked {
             if let existing = bySession[entry.sessionId],
                (existing.updatedAt ?? 0) > (entry.updatedAt ?? 0) {
                 continue
