@@ -202,6 +202,25 @@ final class FleetStateEngineTests: XCTestCase {
         XCTAssertEqual(agents.first?.state, .working)
     }
 
+    func testParkedTerminalIsNotASecondLiveAgent() {
+        // Shape from Claude Code 2.1.296: the terminal keeps reporting busy
+        // after its conversation moves into background job "job1".
+        let terminal = RegistryEntry(pid: 1, sessionId: "parent", kind: "interactive", status: "busy",
+                                     statusUpdatedAt: 1, updatedAt: 1, parkedJobId: "job1")
+        let job = RegistryEntry(pid: 2, sessionId: "job", kind: "bg", jobId: "job1", status: "busy",
+                                statusUpdatedAt: 1, updatedAt: 1)
+        let agents = FleetStateEngine.buildAgents(
+            sessions: [summary(id: "parent"), summary(id: "job", kind: "bg")], registry: [terminal, job],
+            hookEvents: [:], now: now, activeThreshold: threshold, recentWindow: window)
+
+        let parent = try! XCTUnwrap(agents.first { $0.id == "parent" })
+        XCTAssertFalse(parent.isLive)
+        XCTAssertEqual(parent.state, .done, "the parent session ended at the handoff")
+        XCTAssertEqual(agents.filter(\.isLive).map(\.id), ["job"])
+        XCTAssertNil(FleetStateEngine.registryBySession([terminal])["parent"],
+                     "exit tracking reads this map: closing the terminal must not record a mid-turn exit")
+    }
+
     // MARK: crash detection
 
     private func exit(status: String, statusAt: Date? = nil, at: Date) -> RegistryExit {

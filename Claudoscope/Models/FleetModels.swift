@@ -21,16 +21,20 @@ struct RegistryEntry: Decodable, Sendable, Equatable, Identifiable {
     let statusUpdatedAt: Double?    // epoch ms
     let updatedAt: Double?          // epoch ms
     let waitingFor: String?
+    /// Set (2.1.296) on an interactive terminal whose conversation moved into
+    /// a background job; the job's own entry is the live one.
+    let parkedJobId: String?
 
     enum CodingKeys: String, CodingKey {
         case pid, sessionId, cwd, startedAt, procStart, version, kind, jobId, name, nameSource
-        case status, statusUpdatedAt, updatedAt, waitingFor
+        case status, statusUpdatedAt, updatedAt, waitingFor, parkedJobId
     }
 
     init(pid: Int, sessionId: String, cwd: String? = nil, startedAt: Double? = nil,
          procStart: String? = nil, version: String? = nil, kind: String? = nil,
          jobId: String? = nil, name: String? = nil, nameSource: String? = nil, status: String? = nil,
-         statusUpdatedAt: Double? = nil, updatedAt: Double? = nil, waitingFor: String? = nil) {
+         statusUpdatedAt: Double? = nil, updatedAt: Double? = nil, waitingFor: String? = nil,
+         parkedJobId: String? = nil) {
         self.pid = pid
         self.sessionId = sessionId
         self.cwd = cwd
@@ -45,9 +49,13 @@ struct RegistryEntry: Decodable, Sendable, Equatable, Identifiable {
         self.statusUpdatedAt = statusUpdatedAt
         self.updatedAt = updatedAt
         self.waitingFor = waitingFor
+        self.parkedJobId = parkedJobId
     }
 
     var isBackground: Bool { kind == "bg" }
+    /// The terminal handed its conversation to a background job, so its
+    /// session ended at the handoff even though the process stays alive.
+    var isParked: Bool { !(parkedJobId ?? "").isEmpty }
     var statusDate: Date? { statusUpdatedAt.map { Date(timeIntervalSince1970: $0 / 1000) } }
     var startedDate: Date? { startedAt.map { Date(timeIntervalSince1970: $0 / 1000) } }
     /// Last path component of the working directory, used as the terminal
