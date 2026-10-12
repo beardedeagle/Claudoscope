@@ -11,8 +11,12 @@ struct ParsedSession: Sendable {
     let metadata: SessionMetadata
     let parentSessionId: String?
     let isSubagent: Bool
+    /// uuids of records a continued session's file copied in from its parent
+    /// transcript. They render in the chat but belong to the parent, so views
+    /// that compute this session's own figures skip them.
+    let copiedRecordUUIDs: Set<String>
 
-    init(id: String, projectId: String, slug: String?, records: [ParsedRecordRaw], toolResultMap: [String: ToolResultEntry], metadata: SessionMetadata, parentSessionId: String?, isSubagent: Bool = false) {
+    init(id: String, projectId: String, slug: String?, records: [ParsedRecordRaw], toolResultMap: [String: ToolResultEntry], metadata: SessionMetadata, parentSessionId: String?, isSubagent: Bool = false, copiedRecordUUIDs: Set<String> = []) {
         self.id = id
         self.projectId = projectId
         self.slug = slug
@@ -21,6 +25,16 @@ struct ParsedSession: Sendable {
         self.metadata = metadata
         self.parentSessionId = parentSessionId
         self.isSubagent = isSubagent
+        self.copiedRecordUUIDs = copiedRecordUUIDs
+    }
+
+    func isCopiedFromParent(_ record: ParsedRecordRaw) -> Bool {
+        record.uuid.map(copiedRecordUUIDs.contains) ?? false
+    }
+
+    /// `records` without the parent's copies.
+    var ownRecords: [ParsedRecordRaw] {
+        copiedRecordUUIDs.isEmpty ? records : records.filter { !isCopiedFromParent($0) }
     }
 }
 
@@ -139,6 +153,11 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// before parserVersion 12.
     var blockedActionCount: Int? = nil
     var changedFileCount: Int? = nil
+    /// A conversation handed off to a background job: on the parent, the job's
+    /// session id from its `continued-in` record; on the job, the parent whose
+    /// copied records were left out of its figures. Nil for every other session.
+    var continuedInSessionId: String? = nil
+    var continuedFromSessionId: String? = nil
 
     init(
         id: String,
@@ -181,7 +200,9 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         gitBranch: String? = nil,
         latestTurn: LatestTurn? = nil,
         blockedActionCount: Int? = nil,
-        changedFileCount: Int? = nil
+        changedFileCount: Int? = nil,
+        continuedInSessionId: String? = nil,
+        continuedFromSessionId: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -224,6 +245,8 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.latestTurn = latestTurn
         self.blockedActionCount = blockedActionCount
         self.changedFileCount = changedFileCount
+        self.continuedInSessionId = continuedInSessionId
+        self.continuedFromSessionId = continuedFromSessionId
     }
 }
 
