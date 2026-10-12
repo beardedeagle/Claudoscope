@@ -202,6 +202,57 @@ final class FleetStateEngineTests: XCTestCase {
         XCTAssertEqual(agents.first?.state, .working)
     }
 
+    func testParkedTerminalIsNotASecondLiveAgent() {
+        // Shape from Claude Code 2.1.296: the terminal keeps reporting busy
+        // after its conversation moves into background job "job1".
+        let terminal = RegistryEntry(pid: 1, sessionId: "parent", kind: "interactive", status: "busy",
+                                     statusUpdatedAt: 1, updatedAt: 1, parkedJobId: "job1")
+        let job = RegistryEntry(pid: 2, sessionId: "job", kind: "bg", jobId: "job1", status: "busy",
+                                statusUpdatedAt: 1, updatedAt: 1)
+        let agents = FleetStateEngine.buildAgents(
+            sessions: [summary(id: "parent"), summary(id: "job", kind: "bg")], registry: [terminal, job],
+            hookEvents: [:], now: now, activeThreshold: threshold, recentWindow: window)
+
+        let parent = try! XCTUnwrap(agents.first { $0.id == "parent" })
+        XCTAssertFalse(parent.isLive)
+        XCTAssertEqual(parent.state, .done, "the parent session ended at the handoff")
+        XCTAssertEqual(agents.filter(\.isLive).map(\.id), ["job"])
+        XCTAssertNil(FleetStateEngine.registryBySession([terminal])["parent"],
+                     "exit tracking reads this map: closing the terminal must not record a mid-turn exit")
+    }
+
+    func testBusyToParkedTransitionIsNotAnExit() {
+        // Claudoscope saw the terminal busy; on the next read it is parked on job
+        // "job1", so it drops out of registryBySession while still registered.
+        let busy = RegistryEntry(pid: 1, sessionId: "parent", kind: "interactive", status: "busy",
+                                 statusUpdatedAt: 1, updatedAt: 1)
+        let parked = RegistryEntry(pid: 1, sessionId: "parent", kind: "interactive", status: "busy",
+                                   statusUpdatedAt: 2, updatedAt: 2, parkedJobId: "job1")
+        let job = RegistryEntry(pid: 2, sessionId: "job", kind: "bg", jobId: "job1", status: "busy",
+                                statusUpdatedAt: 2, updatedAt: 2)
+        XCTAssertNil(FleetStateEngine.registryBySession([parked, job])["parent"])
+        XCTAssertFalse(FleetStateEngine.isMidTurnExit(busy, hookEvent: nil, registry: [parked, job]),
+                       "a handoff to a background job is not a crash")
+        XCTAssertTrue(FleetStateEngine.isMidTurnExit(busy, hookEvent: nil, registry: [job]),
+                      "the same busy process vanishing is still a mid-turn exit")
+        let otherParked = RegistryEntry(pid: 3, sessionId: "parent", kind: "interactive", status: "busy",
+                                        statusUpdatedAt: 2, updatedAt: 2, parkedJobId: "job1")
+        XCTAssertTrue(FleetStateEngine.isMidTurnExit(busy, hookEvent: nil, registry: [otherParked, job]),
+                      "another process parked on the same session does not hide this one's crash")
+        let reusedPid = RegistryEntry(pid: 1, sessionId: "other", kind: "interactive", status: "busy",
+                                      statusUpdatedAt: 2, updatedAt: 2, parkedJobId: "job2")
+        XCTAssertTrue(FleetStateEngine.isMidTurnExit(busy, hookEvent: nil, registry: [reusedPid, job]),
+                      "a reused pid parked on another session does not hide this one's crash")
+    }
+
+    func testMidTurnExitKeepsStopHookAndIdleRules() {
+        let busy = registry(status: "busy", statusAt: now.addingTimeInterval(-60))
+        XCTAssertFalse(FleetStateEngine.isMidTurnExit(busy, hookEvent: hook(.yourTurn, at: now.addingTimeInterval(-30)), registry: []),
+                       "a Stop hook after the last busy report means the turn ended cleanly")
+        XCTAssertTrue(FleetStateEngine.isMidTurnExit(busy, hookEvent: hook(.yourTurn, at: now.addingTimeInterval(-90)), registry: []))
+        XCTAssertFalse(FleetStateEngine.isMidTurnExit(registry(status: "idle"), hookEvent: nil, registry: []))
+    }
+
     // MARK: crash detection
 
     private func exit(status: String, statusAt: Date? = nil, at: Date) -> RegistryExit {

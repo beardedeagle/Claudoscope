@@ -51,6 +51,16 @@ final class SessionRegistryServiceTests: XCTestCase {
         XCTAssertEqual(entries.first?.isBackground, true)
     }
 
+    func testParkedTerminalCarriesParkedJobId() async throws {
+        let json = """
+        {"pid":\(getpid()),"sessionId":"s3","kind":"interactive","status":"busy","statusUpdatedAt":2,"parkedJobId":"797cc5e7"}
+        """
+        try write(json, to: "sessions/\(getpid()).json")
+        let entries = await SessionRegistryService(claudeDir: claudeDir).loadEntries()
+        XCTAssertEqual(entries.first?.parkedJobId, "797cc5e7")
+        XCTAssertEqual(entries.first?.isParked, true)
+    }
+
     func testDeadPidIsFiltered() async throws {
         let json = """
         {"pid":99999999,"sessionId":"dead","status":"busy"}
