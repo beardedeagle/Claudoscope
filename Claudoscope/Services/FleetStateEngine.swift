@@ -90,15 +90,18 @@ enum FleetStateEngine {
     /// Whether an entry that dropped out of `registryBySession` since the last
     /// read is a crash or kill candidate. Only a busy process counts, and not
     /// when a Stop hook arrived after its last busy report (the turn ended
-    /// cleanly) or when the same process is still registered as parked (its
-    /// conversation moved into a background job, which is a handoff, not an exit).
+    /// cleanly) or when the same process is still registered as parked on the
+    /// same session (its conversation moved into a background job, which is a
+    /// handoff, not an exit).
     static func isMidTurnExit(_ previous: RegistryEntry, hookEvent: FleetHookEvent?, registry: [RegistryEntry]) -> Bool {
         guard previous.status == "busy" || previous.status == "shell" else { return false }
         if let hookEvent, hookEvent.kind == .yourTurn,
            hookEvent.receivedAt >= (previous.statusDate ?? .distantPast) {
             return false
         }
-        return !registry.contains { $0.pid == previous.pid && $0.isParked }
+        return !registry.contains {
+            $0.pid == previous.pid && $0.sessionId == previous.sessionId && $0.isParked
+        }
     }
 
     /// A hook event is stale once the transcript moved past it (the user

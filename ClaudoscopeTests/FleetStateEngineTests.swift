@@ -235,6 +235,14 @@ final class FleetStateEngineTests: XCTestCase {
                        "a handoff to a background job is not a crash")
         XCTAssertTrue(FleetStateEngine.isMidTurnExit(busy, hookEvent: nil, registry: [job]),
                       "the same busy process vanishing is still a mid-turn exit")
+        let otherParked = RegistryEntry(pid: 3, sessionId: "parent", kind: "interactive", status: "busy",
+                                        statusUpdatedAt: 2, updatedAt: 2, parkedJobId: "job1")
+        XCTAssertTrue(FleetStateEngine.isMidTurnExit(busy, hookEvent: nil, registry: [otherParked, job]),
+                      "another process parked on the same session does not hide this one's crash")
+        let reusedPid = RegistryEntry(pid: 1, sessionId: "other", kind: "interactive", status: "busy",
+                                      statusUpdatedAt: 2, updatedAt: 2, parkedJobId: "job2")
+        XCTAssertTrue(FleetStateEngine.isMidTurnExit(busy, hookEvent: nil, registry: [reusedPid, job]),
+                      "a reused pid parked on another session does not hide this one's crash")
     }
 
     func testMidTurnExitKeepsStopHookAndIdleRules() {
