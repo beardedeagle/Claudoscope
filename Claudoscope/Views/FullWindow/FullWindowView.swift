@@ -113,7 +113,15 @@ struct FullWindowView: View {
             // Fire-and-forget data loading (don't block the UI)
             loadDataForRail(newRail)
         }
-        .onAppear { applyRequestedRail(); applyRequestedSelection() }
+        .onAppear {
+            let initialRail = selectedRail
+            applyRequestedRail()
+            applyRequestedSelection()
+            // .onChange(of: selectedRail) skips the initial value, so the
+            // default rail's data never loaded until a rail switch. Load it
+            // here unless a requested navigation already moved off it.
+            if selectedRail == initialRail { loadDataForRail(initialRail) }
+        }
         .onChange(of: store.requestedRail) { _, _ in applyRequestedRail() }
         .onChange(of: store.requestedSelection) { _, _ in applyRequestedSelection() }
         .onChange(of: SessionSelection(projectId: selectedProjectId, sessionId: selectedSessionId)) { _, selection in

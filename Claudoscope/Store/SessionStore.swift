@@ -644,6 +644,23 @@ final class SessionStore {
             }
             .store(in: &cancellables)
 
+        // Debounced insights reload: one /insights run writes up to 50 facet
+        // files plus their session-meta, so collapse the burst into one load.
+        // This is what refreshes the Insights tab while it is on screen.
+        watcher.changes
+            .compactMap { change -> Void? in
+                if case .insightsChanged = change { return () }
+                return nil
+            }
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task {
+                    await self.loadInsights()
+                }
+            }
+            .store(in: &cancellables)
+
         // Canon liveness (hybrid): canon files live in the repo working tree,
         // outside the watched ~/.claude/ tree, so they can't be watched directly.
         // Instead, piggyback on session events — when a session in the currently
@@ -1026,6 +1043,10 @@ final class SessionStore {
 
         case .configChanged:
             // Handled by the debounced config-reload pipeline in setupWatcher().
+            break
+
+        case .insightsChanged:
+            // Handled by the debounced insights-reload pipeline in setupWatcher().
             break
 
         case .mustRescan:

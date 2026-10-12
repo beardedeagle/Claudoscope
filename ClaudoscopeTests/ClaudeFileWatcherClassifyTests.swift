@@ -6,7 +6,11 @@ final class ClaudeFileWatcherClassifyTests: XCTestCase {
     private var prefix: String { ClaudeFileWatcher.registryDirPrefix(claudeDir: claudeDir) }
 
     private func kind(_ rel: String) -> ClaudeFileWatcher.PathKind? {
-        ClaudeFileWatcher.classify(path: claudeDir.appendingPathComponent(rel).path, registryDirPrefix: prefix)
+        ClaudeFileWatcher.classify(
+            path: claudeDir.appendingPathComponent(rel).path,
+            registryDirPrefix: prefix,
+            usageDataDirPrefix: ClaudeFileWatcher.usageDataDirPrefix(claudeDir: claudeDir)
+        )
     }
 
     func testSessionTranscripts() {
@@ -23,6 +27,13 @@ final class ClaudeFileWatcherClassifyTests: XCTestCase {
         XCTAssertEqual(kind("sessions/56010.json"), .registry)
         XCTAssertNil(kind("sessions/56010.abcdef0123.key"), ".key siblings hold secrets")
         XCTAssertNil(kind("projects/-Users-x-sessions/foo.json"), "a project dir named sessions is not the registry")
+    }
+
+    func testInsightsUsageDataJsonOnly() {
+        XCTAssertEqual(kind("usage-data/facets/0b5f15e5-facb.json"), .insights)
+        XCTAssertEqual(kind("usage-data/session-meta/0b5f15e5-facb.json"), .insights)
+        XCTAssertNil(kind("usage-data/report.html"), "the /insights HTML report is not facet data")
+        XCTAssertNil(kind("plugins/x/usage-data/facets/a.json"), "only the root usage-data dir counts")
     }
 
     func testConfigFiles() {
