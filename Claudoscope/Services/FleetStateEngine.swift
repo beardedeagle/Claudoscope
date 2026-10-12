@@ -87,6 +87,20 @@ enum FleetStateEngine {
         return last <= exit.at
     }
 
+    /// Whether an entry that dropped out of `registryBySession` since the last
+    /// read is a crash or kill candidate. Only a busy process counts, and not
+    /// when a Stop hook arrived after its last busy report (the turn ended
+    /// cleanly) or when the same process is still registered as parked (its
+    /// conversation moved into a background job, which is a handoff, not an exit).
+    static func isMidTurnExit(_ previous: RegistryEntry, hookEvent: FleetHookEvent?, registry: [RegistryEntry]) -> Bool {
+        guard previous.status == "busy" || previous.status == "shell" else { return false }
+        if let hookEvent, hookEvent.kind == .yourTurn,
+           hookEvent.receivedAt >= (previous.statusDate ?? .distantPast) {
+            return false
+        }
+        return !registry.contains { $0.pid == previous.pid && $0.isParked }
+    }
+
     /// A hook event is stale once the transcript moved past it (the user
     /// answered) or the registry reports the process busy again after it.
     static func hookEventIsStale(_ event: FleetHookEvent, lastTimestamp: String, registry: RegistryEntry?) -> Bool {
@@ -150,7 +164,8 @@ enum FleetStateEngine {
     /// crash): keep the most recently updated one. Parked terminals are left
     /// out: their session continues in a background job with its own entry,
     /// so keeping them showed a second Working card and, once the terminal
-    /// closed, a false mid-turn exit (exit tracking reads this map too).
+    /// closed, a false mid-turn exit (exit tracking reads this map too; the
+    /// busy-to-parked transition itself is covered by `isMidTurnExit`).
     static func registryBySession(_ registry: [RegistryEntry]) -> [String: RegistryEntry] {
         var bySession: [String: RegistryEntry] = [:]
         for entry in registry where !entry.isParked {
