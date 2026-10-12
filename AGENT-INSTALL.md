@@ -33,8 +33,7 @@ anything below.
 **Homebrew available (recommended):**
 
 ```bash
-brew tap cordwainersmith/claudoscope   # no-op if already tapped
-brew install --cask claudoscope        # or: brew upgrade --cask claudoscope
+brew install --cask claudoscope   # or: brew upgrade --cask claudoscope
 ```
 
 **Homebrew not available:** install the DMG directly from the latest GitHub
@@ -61,8 +60,7 @@ Report the result to the user. Don't auto-launch the app as part of install.
 
 ## Uninstall
 
-- Brew-managed: `brew uninstall --cask claudoscope` (ask before also running
-  `brew untap cordwainersmith/claudoscope`).
+- Brew-managed: `brew uninstall --cask claudoscope`.
 - DMG-managed: move `/Applications/Claudoscope.app` to the Trash.
 
 Neither removes `~/Library/Application Support/Claudoscope/` or a previously

@@ -95,9 +95,10 @@ Full version history is in [CHANGELOG.md](CHANGELOG.md).
 ### Homebrew (recommended)
 
 ```bash
-brew tap cordwainersmith/claudoscope
 brew install --cask claudoscope
 ```
+
+Installed from the old `cordwainersmith/claudoscope` tap? Nothing to do: Homebrew migrates it to the official cask on the next `brew upgrade`, and the in-app updater keeps working either way.
 
 ### Updating
 
