@@ -33,7 +33,7 @@ func extractToolCalls(from session: ParsedSession) -> [ToolCallEntry] {
     var entries: [ToolCallEntry] = []
     var turnIndex = 0
 
-    for record in session.records {
+    for record in session.records where !session.isCopiedFromParent(record) {
         guard record.type == .assistant else { continue }
         turnIndex += 1
 
