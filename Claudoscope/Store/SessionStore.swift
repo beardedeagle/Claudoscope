@@ -1119,6 +1119,9 @@ final class SessionStore {
         let newJob = current?.continuedInSessionId
         if let oldJob, oldJob != newJob {
             continuationParents[oldJob] = nil
+            // The memo guards one link; once that link is gone, a parent that
+            // comes back gets a fresh try.
+            continuationRereads[oldJob] = nil
             rereadIfContinuationStale(jobId: oldJob)
         }
         if let current, let newJob {
